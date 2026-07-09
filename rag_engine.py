@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_groq import ChatGroq
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
@@ -13,8 +13,11 @@ load_dotenv()
 
 class RAGEngine:
     def __init__(self):
-        # Lightweight local embeddings, no transformers conflict
-        self.embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+        # HuggingFace hosted embeddings — no local download, works on Vercel
+        self.embeddings = HuggingFaceEndpointEmbeddings(
+            model="BAAI/bge-small-en-v1.5",
+            huggingfacehub_api_token=os.getenv("HF_TOKEN"),
+        )
         # Groq LLM — llama3 is fast and free on Groq
         self.llm = ChatGroq(
             model="llama-3.1-8b-instant",
