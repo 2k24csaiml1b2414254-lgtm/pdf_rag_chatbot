@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RAG Chatbot</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      background: #1a1a2e;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #2a2a4a;
+    }
+
+    header h1 { font-size: 1.2rem; color: #7c83fd; }
+
+    .upload-area {
+      background: #111122;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid #1e1e3a;
+    }
+
+    .upload-area input[type="file"] { display: none; }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: #7c83fd; color: #fff; }
+    .btn-secondary { background: #2a2a4a; color: #aaa; }
+    .btn-danger { background: #c0392b; color: #fff; }
+
+    #upload-label {
+      background: #2a2a4a;
+      color: #aaa;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    #upload-label:hover { background: #3a3a6a; }
+
+    #file-name { font-size: 0.82rem; color: #666; }
+    #status-msg { font-size: 0.82rem; margin-left: auto; color: #7c83fd; }
+
+    #chat-box {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .message {
+      max-width: 75%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 0.92rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+    }
+
+    .message.user {
+      background: #7c83fd;
+      color: #fff;
+      align-self: flex-end;
+      border-bottom-right-radius: 2px;
+    }
+
+    .message.bot {
+      background: #1e1e3a;
+      color: #ddd;
+      align-self: flex-start;
+      border-bottom-left-radius: 2px;
+    }
+
+    .message.bot.loading { color: #555; font-style: italic; }
+
+    .input-area {
+      display: flex;
+      gap: 10px;
+      padding: 14px 24px;
+      background: #111122;
+      border-top: 1px solid #1e1e3a;
+    }
+
+    #question {
+      flex: 1;
+      background: #1e1e3a;
+      border: 1px solid #2a2a4a;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #e0e0e0;
+      font-size: 0.92rem;
+      resize: none;
+      outline: none;
+      height: 44px;
+    }
+    #question:focus { border-color: #7c83fd; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>RAG Chatbot</h1>
+  <button class="btn btn-danger" onclick="resetSession()">Reset</button>
+</header>
+
+<div class="upload-area">
+  <label id="upload-label" for="file-input">Choose File</label>
+  <input type="file" id="file-input" accept=".pdf,.txt" onchange="updateFileName()" />
+  <span id="file-name">No file chosen</span>
+  <button class="btn btn-primary" onclick="uploadFile()">Upload</button>
+  <span id="status-msg"></span>
+</div>
+
+<div id="chat-box">
+  <div class="message bot">Upload a PDF or TXT file, then ask me anything about it.</div>
+</div>
+
+<div class="input-area">
+  <textarea id="question" placeholder="Ask a question..." onkeydown="handleKey(event)"></textarea>
+  <button class="btn btn-primary" onclick="sendMessage()">Send</button>
+</div>
+
+<script>
+  function updateFileName() {
+    const f = document.getElementById('file-input').files[0];
+    document.getElementById('file-name').textContent = f ? f.name : 'No file chosen';
+  }
+
+  async function uploadFile() {
+    const file = document.getElementById('file-input').files[0];
+    if (!file) { setStatus('Select a file first.'); return; }
+
+    setStatus('Uploading...');
+    const form = new FormData();
+    form.append('file', file);
+
+    const res = await fetch('/upload', { method: 'POST', body: form });
+    const data = await res.json();
+    setStatus(data.message || data.error);
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('question');
+    const question = input.value.trim();
+    if (!question) return;
+
+    appendMessage(question, 'user');
+    input.value = '';
+
+    const loader = appendMessage('Thinking...', 'bot loading');
+
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question })
+    });
+    const data = await res.json();
+
+    loader.remove();
+    appendMessage(data.answer || data.error, 'bot');
+  }
+
+  async function resetSession() {
+    await fetch('/reset', { method: 'POST' });
+    document.getElementById('chat-box').innerHTML =
+      '<div class="message bot">Session reset. Upload a new document to start.</div>';
+    document.getElementById('file-name').textContent = 'No file chosen';
+    document.getElementById('file-input').value = '';
+    setStatus('');
+  }
+
+  function appendMessage(text, cls) {
+    const box = document.getElementById('chat-box');
+    const div = document.createElement('div');
+    div.className = 'message ' + cls;
+    div.textContent = text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+    return div;
+  }
+
+  function setStatus(msg) {
+    document.getElementById('status-msg').textContent = msg;
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  }
+</script>
+</body>
+</html>
